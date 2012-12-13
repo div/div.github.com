@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Home</title>
+    <meta name="description" content="Whatever">
+    <meta name="author" content="Igor Davydov">
+
+    <!-- Le HTML5 shim, for IE6-8 support of HTML elements -->
+    <!--[if lt IE 9]>
+      <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+
+    <!-- Le styles -->
+    <link href="/assets/div/stylesheets/bootstrap.min.css?0.805152998638709" type="text/css" rel="stylesheet" media="all">
+<link href="/assets/div/stylesheets/style.css?0.5483284560425246" type="text/css" rel="stylesheet" media="all">
+<link href="/assets/div/widgets/google_prettify/stylesheets/twitter-bootstrap.css?0.6886683481923281" type="text/css" rel="stylesheet" media="all">
+
+
+    <script type="text/javascript">
+
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-36971433-1']);
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+
+</script>
+
+    <!-- Le fav and touch icons -->
+  <!-- Update these with your own images
+    <link rel="shortcut icon" href="images/favicon.ico">
+    <link rel="apple-touch-icon" href="images/apple-touch-icon.png">
+    <link rel="apple-touch-icon" sizes="72x72" href="images/apple-touch-icon-72x72.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="images/apple-touch-icon-114x114.png">
+  -->
+
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans' rel='stylesheet' type='text/css'>
+  </head>
+
+  <body>
+
+<!--     <div class="navbar">
+      <div class="navbar-inner">
+        <div class="container">
+          <a class="brand" href="/">Random thoughts by Igor Davydov</a>
+          <ul class="nav">
+              
+                <li><a href="/about">About Me</a></li>
+          </ul>
+        </div>
+      </div>
+    </div> -->
+
+    <div class="container">
+
+      <div class="masthead">
+        <p>Random thoughts by Igor Davydov</p>
+      </div>
+
+      <div class="content">
+        <!-- <div class="page-header">
+  <h1>Home </h1>
+</div> -->
+
+<!-- <div class="row"> -->
+  <!-- <div class="span12"> -->
+    <!-- <h2>Start</h2>
+<p>
+  Ruhoh is all about the command-line.
+  <br>Check out the goods:
+</p>
+<pre><code>$ ruhoh help</code></pre> -->
+
+
+<div class="post">
+  <h1 class="title"><a href="/process-specific-versions-of-your-carrierwave-uploads-in-the-background">Process specific versions of your carrierwave uploads in the background</a></h1> <span class="post-date">2012-12-13</span>
+
+  <p>I needed to selectively process some versions of an uploaded file in the background job. But wanted also to process some small preview (let&#39;s say we are uploading images and it is a :thumb) synchronously and show it to the user as soon as it is done. Carrierwave allowed us only to recreate all versions at once, so i had to fix it first. Since this <a href="https://github.com/jnicklas/carrierwave/pull/906">Pull</a> has been merged in, you can pass versions to recreate_versions! method like so:</p>
+
+<pre><code>recreate_versions!(:thumb, :small)
+</code></pre>
+
+<p>Now to be able to process selected versions in the background job you only need some guard to not process those versions synchronously:</p>
+
+<pre><code>class MyUploader &lt; CarrierWave::Uploader::Base
+# some stuff omitted
+
+  version :thumb do
+    process :process_thumb
+  end
+
+  version :large, if: :process_async? do
+    process :process_large
+  end
+
+  def process_async?(image = nil)
+    !! @process_async
+  end
+
+  def process_async=(value)
+    @process_async = value
+  end
+end
+</code></pre>
+
+<p>And in your worker you just set @process_async to true:</p>
+
+<pre><code>class MyWorker
+  def self.perform(image_id)
+    image = Image.find(image_id)
+    uploader = image.file
+    uploader.process_async = true
+    uploader.recreate_versions!(:large)
+    uploader.process_async = false
+  end
+end
+</code></pre>
+
+<p>To trigger your worker add this to the the model:</p>
+
+<pre><code>after_commit :queue_processing, if: :file_previously_changed?
+
+private
+
+  def file_previously_changed?
+    previous_changes[:file].present?
+  end
+
+  def queue_processing
+    Resque.enqueue(MyWorker, self.id)
+  end
+</code></pre>
+
+<p>And that&#39;s it!</p>
+
+
+<!--   <div class="more">
+    <a href="/process-specific-versions-of-your-carrierwave-uploads-in-the-background" class="btn">read more..</a>
+  </div> -->
+</div>
+<div class="post">
+  <h1 class="title"><a href="/saving-unsubmitted-form-data-with-localstorage-and-garlic-js">Saving unsubmitted form data with localStorage and Garlic.js</a></h1> <span class="post-date">2012-12-11</span>
+
+  <p>I was thinking about improving user forms in one of my projects lately, and the first thing that came to mind was using some sort of autosave functionality. But I can&#39;t really see a clean way to implement it with traditional Railsy style controllers. We would have to create an empty model instance, persist it, skip validations while user fills in all the fields. And we have to clean up if the user never really save the model. So I really dislike this approach.</p>
+
+<p>We can easily do any kind of autosave on our update actions of the existing model. But the real problem is only with new data, which has not been validated and persisted yet. So how can we persist data from a form before it is submitted? And here comes localStore and fancy little library <a href="http://garlicjs.org">garlic.js</a>. The only thing you have to do after adding the library is to add <code>data-persist=&quot;garlic&quot;</code> to your form. That&#39;s it, your input will be stored if form is not submitted.</p>
+
+<p>I also have some image uploading in my form, so to retrieve the images on form reload I put image ids in hidden inputs.</p>
+
+<pre><code class="html">&lt;input class=&quot;garlic-auto-save&quot; type=&quot;hidden&quot; name=&quot;image_ids[0]&quot; value=&#39;&#39;&gt;
+</code></pre>
+
+<p>You will have to trigger &#39;change&#39; event manually for garlic to save new value</p>
+
+<pre><code class="coffeescript">$(&#39;input[value=&quot;&quot;]&#39;).eq(0).val(&#39;1&#39;).trigger(&#39;change&#39;)
+</code></pre>
+
+<p>And now on the form reload we can recreate the same state as before. Pretty cool!</p>
+
+
+<!--   <div class="more">
+    <a href="/saving-unsubmitted-form-data-with-localstorage-and-garlic-js" class="btn">read more..</a>
+  </div> -->
+</div>
+<div class="post">
+  <h1 class="title"><a href="/ruby/loading-rails-faster-with-ruby-performance-patches">Loading rails faster with ruby performance patches</a></h1> <span class="post-date">2012-11-01</span>
+
+  <p>You would definitely like to see rails loading faster, and even more important rspec to spin off all the tests without any startup penalties (only if you are not loading rails, of course).</p>
+
+<p>One of the things you can do is to build ruby with performance patches by <a href="https://github.com/funny-falcon">funny-falcon</a>. I&#39;ve been on the conference in Moscow where he gave the <a href="http://live.digitaloctober.ru/embed/1419?language=ru&amp;params%5Bpw%5D=635&amp;params%5Bph%5D=355&amp;params%5Bepisodes_under%5D=1&amp;params%5Bext_css%5D=do_player&amp;params%5Bext_js%5D=do_player&amp;params%5Bnolqtext%5D=1&amp;params%5Bstate%5D=pause#time1347692940">talk</a> about all the recent ruby patches he made. And this guy is really smart and knows his way thorough ruby internals really well. I could hardly understand half of his talk.
+I&#39;ve found the results of applying this patches to be pretty impressive:</p>
+
+<pre><code>time (rails runner &quot;puts &#39;hello world&#39;&quot;)
+
+# 1.9.3-p194
+# without patch:
+4.80s user 0.92s system 87% cpu 6.555 total
+# with patch:
+2.73s user 0.83s system 82% cpu 4.299 total
+
+# 1.9.3-p286
+# without patch:
+3.74s user 0.82s system 83% cpu 5.476 total
+# with patch:
+2.28s user 0.71s system 85% cpu 3.496 total
+</code></pre>
+
+<p>You can find how to build ruby with those patches in this <a href="https://gist.github.com/3826116">gist</a>.
+There is one particular feature in the gist</p>
+
+<pre><code>CONFIGURE_OPTS=&quot;--disable-install-doc --with-readline-dir=$(brew --prefix readline)&quot;
+</code></pre>
+
+<p>which is telling ruby-build to build ruby with readline support which would let you use utf-8 characters in irb. It seems like this is only an OSX <a href="http://blog.rlmflores.me/blog/2012/04/25/adding-utf-8-support-to-rubies-compiled-through-ruby-build/">issue</a> .</p>
+
+
+<!--   <div class="more">
+    <a href="/ruby/loading-rails-faster-with-ruby-performance-patches" class="btn">read more..</a>
+  </div> -->
+</div>
+<div class="post">
+  <h1 class="title"><a href="/about-this-blog">About this blog</a></h1> <span class="post-date">2012-10-31</span>
+
+  <p>I felt the need to start blogging for a while already, and I think I&#39;m finally pretty close to do so.</p>
+
+<p>This blog is <a href="http://github.com/div/blog">static</a> and it is hosted on the github pages. All the generation is done by <a href="http://ruhoh.com/" title="Ruhoh">ruhoh</a> - a cool and simple alternative to jekyll and octopress. The only thing you&#39;ll need to add to ruhoh is a simple rake task for deploy on github pages.</p>
+
+<pre><code class="ruby">desc &quot;deploy build directory to github pages&quot;
+task :deploy do
+  cd &quot;compiled/#{REPO}&quot; do
+    system &quot;git init .&quot;
+    system &quot;git add .&quot;
+    system &quot;git add -u&quot;
+    message = &quot;Updated at #{Time.now.utc}&quot;
+    system &quot;git commit -m \&quot;#{message}\&quot;&quot;
+    system &quot;git push git@github.com:#{USER}/#{REPO} master:gh-pages --force&quot;
+    system &quot;rm -rf .git&quot;
+  end
+end
+</code></pre>
+
+
+<!--   <div class="more">
+    <a href="/about-this-blog" class="btn">read more..</a>
+  </div> -->
+</div>
+
+  <!-- </div> -->
+<!-- </div> -->
+
+      </div>
+
+      <footer class="colophon">
+        <ul>
+          <li>
+            <a href="/projects">Projects</a>
+          </li>
+          <li>
+            <a href="/about">About</a>
+          </li>
+          <li>
+            <a href="mailto:igordvdv@gmail.com?subject=Hey!" title="Email Me">Email</a>
+          </li>
+        </ul>
+        <p>&copy; Igor Davydov 2012
+          with help from <a href="http://ruhoh.com" target="_blank" title="The Definitive Technical Blogging Framework">ruhoh</a> and style stollen from <a href="http://twitter.com/mdo" target="_blank" title="Mark Otto on Twitter">@mdo</a> <a href="http://markdotto.com" target="_blank" title="Mark Otto Blog">blog</a>
+          <!-- and <a href="http://twitter.github.com/bootstrap/" target="_blank">Twitter Bootstrap</a> -->
+        </p>
+      </footer>
+
+    </div> <!-- /container -->
+
+    <!-- Google Prettify -->
+<script src="http://cdnjs.cloudflare.com/ajax/libs/prettify/188.0.0/prettify.js"></script>
+<script>
+  var pres = document.getElementsByTagName("pre");
+  for (var i=0; i < pres.length; ++i) {
+    pres[i].className = "prettyprint ";
+  }
+  prettyPrint();
+</script>
+<!-- end Google Prettify -->
+  </body>
+</html>

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>About this blog</title>
+    <meta name="description" content="Some details about how is this blog made">
+    <meta name="author" content="Igor Davydov">
+
+    <!-- Le HTML5 shim, for IE6-8 support of HTML elements -->
+    <!--[if lt IE 9]>
+      <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+
+    <!-- Le styles -->
+    <link href="/assets/div/stylesheets/bootstrap.min.css?0.04479405907585965" type="text/css" rel="stylesheet" media="all">
+<link href="/assets/div/stylesheets/style.css?0.1840156774727688" type="text/css" rel="stylesheet" media="all">
+<link href="/assets/div/widgets/google_prettify/stylesheets/twitter-bootstrap.css?0.6805035283118792" type="text/css" rel="stylesheet" media="all">
+
+
+    <script type="text/javascript">
+
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-36971433-1']);
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+
+</script>
+
+    <!-- Le fav and touch icons -->
+  <!-- Update these with your own images
+    <link rel="shortcut icon" href="images/favicon.ico">
+    <link rel="apple-touch-icon" href="images/apple-touch-icon.png">
+    <link rel="apple-touch-icon" sizes="72x72" href="images/apple-touch-icon-72x72.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="images/apple-touch-icon-114x114.png">
+  -->
+
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans' rel='stylesheet' type='text/css'>
+  </head>
+
+  <body>
+
+<!--     <div class="navbar">
+      <div class="navbar-inner">
+        <div class="container">
+          <a class="brand" href="/">Random thoughts by Igor Davydov</a>
+          <ul class="nav">
+              
+                <li><a href="/about">About Me</a></li>
+          </ul>
+        </div>
+      </div>
+    </div> -->
+
+    <div class="container">
+
+      <div class="masthead">
+        <p>Random thoughts by Igor Davydov</p>
+      </div>
+
+      <div class="content">
+        <!-- <div class="page-header">
+  <h1>About this blog </h1>
+</div> -->
+
+<!-- <div class="row">
+  <div class="span8"> -->
+    <p>I felt the need to start blogging for a while already, and I think I&#39;m finally pretty close to do so.</p>
+
+<p>This blog is <a href="http://github.com/div/blog">static</a> and it is hosted on the github pages. All the generation is done by <a href="http://ruhoh.com/" title="Ruhoh">ruhoh</a> - a cool and simple alternative to jekyll and octopress. The only thing you&#39;ll need to add to ruhoh is a simple rake task for deploy on github pages.</p>
+
+<pre><code class="ruby">desc &quot;deploy build directory to github pages&quot;
+task :deploy do
+  cd &quot;compiled/#{REPO}&quot; do
+    system &quot;git init .&quot;
+    system &quot;git add .&quot;
+    system &quot;git add -u&quot;
+    message = &quot;Updated at #{Time.now.utc}&quot;
+    system &quot;git commit -m \&quot;#{message}\&quot;&quot;
+    system &quot;git push git@github.com:#{USER}/#{REPO} master:gh-pages --force&quot;
+    system &quot;rm -rf .git&quot;
+  end
+end
+</code></pre>
+
+    <hr>
+    <div class="pagination">
+        <ul>
+            <span class="prev disabled"><a>&larr; Previous</a></span>
+
+            <span><a href="/archive">Archive</a></span>
+
+            <span class="next"><a href="/ruby/loading-rails-faster-with-ruby-performance-patches" title="Loading rails faster with ruby performance patches">Next &rarr;</a></span>
+        </ul>
+    </div>
+    <hr>
+    <!-- <div id="disqus_thread"></div>
+<script>
+    var disqus_developer = 1;
+    var disqus_shortname = 'divrb'; // required: replace example with your forum shortname
+    /* * * DON'T EDIT BELOW THIS LINE * * */
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = 'http://' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="http://disqus.com" class="dsq-brlink">blog comments powered by <span class="logo-disqus">Disqus</span></a>
+ -->
+  <!-- </div> -->
+
+<!--   <div class="span4">
+    <h4>Published</h4>
+    <div class="date"><span>2012-10-31</span></div>
+    <br>
+    <h4>Categories</h4>
+    <ul class="tag_box">
+    </ul>
+    <br>
+    <h4>Tags</h4>
+    <ul class="tag_box">
+    </ul>
+  </div> -->
+<!-- </div> -->
+
+      </div>
+
+      <footer class="colophon">
+        <ul>
+          <li>
+            <a href="/projects">Projects</a>
+          </li>
+          <li>
+            <a href="/about">About</a>
+          </li>
+          <li>
+            <a href="mailto:igordvdv@gmail.com?subject=Hey!" title="Email Me">Email</a>
+          </li>
+        </ul>
+        <p>&copy; Igor Davydov 2012
+          with help from <a href="http://ruhoh.com" target="_blank" title="The Definitive Technical Blogging Framework">ruhoh</a> and style stollen from <a href="http://twitter.com/mdo" target="_blank" title="Mark Otto on Twitter">@mdo</a> <a href="http://markdotto.com" target="_blank" title="Mark Otto Blog">blog</a>
+          <!-- and <a href="http://twitter.github.com/bootstrap/" target="_blank">Twitter Bootstrap</a> -->
+        </p>
+      </footer>
+
+    </div> <!-- /container -->
+
+    <!-- Google Prettify -->
+<script src="http://cdnjs.cloudflare.com/ajax/libs/prettify/188.0.0/prettify.js"></script>
+<script>
+  var pres = document.getElementsByTagName("pre");
+  for (var i=0; i < pres.length; ++i) {
+    pres[i].className = "prettyprint ";
+  }
+  prettyPrint();
+</script>
+<!-- end Google Prettify -->
+  </body>
+</html>

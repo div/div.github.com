@@ -1,0 +1,571 @@
+<?xml version="1.0"?>
+<rss version="2.0">
+  <channel>
+    <title>Random thoughts by Igor Davydov</title>
+    <link>http://divrb.com</link>
+    <pubDate>2012-12-13 12:16:05 +0400</pubDate>
+    <item>
+      <title>Process specific versions of your carrierwave uploads in the background</title>
+      <link>http://divrb.com/process-specific-versions-of-your-carrierwave-uploads-in-the-background</link>
+      <pubDate>2012-12-13</pubDate>
+      <description>&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+  &lt;head&gt;
+    &lt;meta charset="utf-8"&gt;
+    &lt;title&gt;Process specific versions of your carrierwave uploads in the background&lt;/title&gt;
+    &lt;meta name="author" content="Igor Davydov"&gt;
+
+    &lt;!-- Le HTML5 shim, for IE6-8 support of HTML elements --&gt;
+    &lt;!--[if lt IE 9]&gt;
+      &lt;script src="http://html5shim.googlecode.com/svn/trunk/html5.js"&gt;&lt;/script&gt;
+    &lt;![endif]--&gt;
+
+    &lt;!-- Le styles --&gt;
+    &lt;link href="/assets/div/stylesheets/bootstrap.min.css?0.08053596552607567" type="text/css" rel="stylesheet" media="all"&gt;
+&lt;link href="/assets/div/stylesheets/style.css?0.36860102524943084" type="text/css" rel="stylesheet" media="all"&gt;
+&lt;link href="/assets/div/widgets/google_prettify/stylesheets/twitter-bootstrap.css?0.2892948173268022" type="text/css" rel="stylesheet" media="all"&gt;
+
+
+    &lt;script type="text/javascript"&gt;
+
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-36971433-1']);
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+
+&lt;/script&gt;
+
+    &lt;!-- Le fav and touch icons --&gt;
+  &lt;!-- Update these with your own images
+    &lt;link rel="shortcut icon" href="images/favicon.ico"&gt;
+    &lt;link rel="apple-touch-icon" href="images/apple-touch-icon.png"&gt;
+    &lt;link rel="apple-touch-icon" sizes="72x72" href="images/apple-touch-icon-72x72.png"&gt;
+    &lt;link rel="apple-touch-icon" sizes="114x114" href="images/apple-touch-icon-114x114.png"&gt;
+  --&gt;
+
+    &lt;link href='http://fonts.googleapis.com/css?family=Open+Sans' rel='stylesheet' type='text/css'&gt;
+  &lt;/head&gt;
+
+  &lt;body&gt;
+
+&lt;!--     &lt;div class="navbar"&gt;
+      &lt;div class="navbar-inner"&gt;
+        &lt;div class="container"&gt;
+          &lt;a class="brand" href="/"&gt;Random thoughts by Igor Davydov&lt;/a&gt;
+          &lt;ul class="nav"&gt;
+              
+                &lt;li&gt;&lt;a href="/about"&gt;About Me&lt;/a&gt;&lt;/li&gt;
+          &lt;/ul&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/div&gt; --&gt;
+
+    &lt;div class="container"&gt;
+
+      &lt;div class="masthead"&gt;
+        &lt;p&gt;Random thoughts by Igor Davydov&lt;/p&gt;
+      &lt;/div&gt;
+
+      &lt;div class="content"&gt;
+        &lt;!-- &lt;div class="page-header"&gt;
+  &lt;h1&gt;Process specific versions of your carrierwave uploads in the background &lt;/h1&gt;
+&lt;/div&gt; --&gt;
+
+&lt;!-- &lt;div class="row"&gt;
+  &lt;div class="span8"&gt; --&gt;
+    &lt;p&gt;I needed to selectively process some versions of an uploaded file in the background job. But wanted also to process some small preview (let&amp;#39;s say we are uploading images and it is a :thumb) synchronously and show it to the user as soon as it is done. Carrierwave allowed us only to recreate all versions at once, so i had to fix it first. Since this &lt;a href="https://github.com/jnicklas/carrierwave/pull/906"&gt;Pull&lt;/a&gt; has been merged in, you can pass versions to recreate_versions! method like so:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;recreate_versions!(:thumb, :small)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Now to be able to process selected versions in the background job you only need some guard to not process those versions synchronously:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;class MyUploader &amp;lt; CarrierWave::Uploader::Base
+# some stuff omitted
+
+  version :thumb do
+    process :process_thumb
+  end
+
+  version :large, if: :process_async? do
+    process :process_large
+  end
+
+  def process_async?(image = nil)
+    !! @process_async
+  end
+
+  def process_async=(value)
+    @process_async = value
+  end
+end
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;And in your worker you just set @process_async to true:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;class MyWorker
+  def self.perform(image_id)
+    image = Image.find(image_id)
+    uploader = image.file
+    uploader.process_async = true
+    uploader.recreate_versions!(:large)
+    uploader.process_async = false
+  end
+end
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;To trigger your worker add this to the the model:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;after_commit :queue_processing, if: :file_previously_changed?
+
+private
+
+  def file_previously_changed?
+    previous_changes[:file].present?
+  end
+
+  def queue_processing
+    Resque.enqueue(MyWorker, self.id)
+  end
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;And that&amp;#39;s it!&lt;/p&gt;
+
+    &lt;hr&gt;
+    &lt;div class="pagination"&gt;
+        &lt;ul&gt;
+            &lt;span class="prev"&gt;&lt;a href="/saving-unsubmitted-form-data-with-localstorage-and-garlic-js" title="Saving unsubmitted form data with localStorage and Garlic.js"&gt;&amp;larr; Previous&lt;/a&gt;&lt;/span&gt;
+
+            &lt;span&gt;&lt;a href="/archive"&gt;Archive&lt;/a&gt;&lt;/span&gt;
+
+            &lt;span class="next disabled"&gt;&lt;a&gt;Next &amp;rarr;&lt;/a&gt;&lt;/span&gt;
+        &lt;/ul&gt;
+    &lt;/div&gt;
+    &lt;hr&gt;
+    &lt;!-- &lt;div id="disqus_thread"&gt;&lt;/div&gt;
+&lt;script&gt;
+    var disqus_developer = 1;
+    var disqus_shortname = 'divrb'; // required: replace example with your forum shortname
+    /* * * DON'T EDIT BELOW THIS LINE * * */
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = 'http://' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+&lt;/script&gt;
+&lt;noscript&gt;Please enable JavaScript to view the &lt;a href="http://disqus.com/?ref_noscript"&gt;comments powered by Disqus.&lt;/a&gt;&lt;/noscript&gt;
+&lt;a href="http://disqus.com" class="dsq-brlink"&gt;blog comments powered by &lt;span class="logo-disqus"&gt;Disqus&lt;/span&gt;&lt;/a&gt;
+ --&gt;
+  &lt;!-- &lt;/div&gt; --&gt;
+
+&lt;!--   &lt;div class="span4"&gt;
+    &lt;h4&gt;Published&lt;/h4&gt;
+    &lt;div class="date"&gt;&lt;span&gt;2012-12-13&lt;/span&gt;&lt;/div&gt;
+    &lt;br&gt;
+    &lt;h4&gt;Categories&lt;/h4&gt;
+    &lt;ul class="tag_box"&gt;
+    &lt;/ul&gt;
+    &lt;br&gt;
+    &lt;h4&gt;Tags&lt;/h4&gt;
+    &lt;ul class="tag_box"&gt;
+    &lt;/ul&gt;
+  &lt;/div&gt; --&gt;
+&lt;!-- &lt;/div&gt; --&gt;
+
+      &lt;/div&gt;
+
+      &lt;footer class="colophon"&gt;
+        &lt;ul&gt;
+          &lt;li&gt;
+            &lt;a href="/projects"&gt;Projects&lt;/a&gt;
+          &lt;/li&gt;
+          &lt;li&gt;
+            &lt;a href="/about"&gt;About&lt;/a&gt;
+          &lt;/li&gt;
+          &lt;li&gt;
+            &lt;a href="mailto:igordvdv@gmail.com?subject=Hey!" title="Email Me"&gt;Email&lt;/a&gt;
+          &lt;/li&gt;
+        &lt;/ul&gt;
+        &lt;p&gt;&amp;copy; Igor Davydov 2012
+          with help from &lt;a href="http://ruhoh.com" target="_blank" title="The Definitive Technical Blogging Framework"&gt;ruhoh&lt;/a&gt; and style stollen from &lt;a href="http://twitter.com/mdo" target="_blank" title="Mark Otto on Twitter"&gt;@mdo&lt;/a&gt; &lt;a href="http://markdotto.com" target="_blank" title="Mark Otto Blog"&gt;blog&lt;/a&gt;
+          &lt;!-- and &lt;a href="http://twitter.github.com/bootstrap/" target="_blank"&gt;Twitter Bootstrap&lt;/a&gt; --&gt;
+        &lt;/p&gt;
+      &lt;/footer&gt;
+
+    &lt;/div&gt; &lt;!-- /container --&gt;
+
+    &lt;!-- Google Prettify --&gt;
+&lt;script src="http://cdnjs.cloudflare.com/ajax/libs/prettify/188.0.0/prettify.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  var pres = document.getElementsByTagName("pre");
+  for (var i=0; i &lt; pres.length; ++i) {
+    pres[i].className = "prettyprint ";
+  }
+  prettyPrint();
+&lt;/script&gt;
+&lt;!-- end Google Prettify --&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+</description>
+    </item>
+    <item>
+      <title>Saving unsubmitted form data with localStorage and Garlic.js</title>
+      <link>http://divrb.com/saving-unsubmitted-form-data-with-localstorage-and-garlic-js</link>
+      <pubDate>2012-12-11</pubDate>
+      <description>&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+  &lt;head&gt;
+    &lt;meta charset="utf-8"&gt;
+    &lt;title&gt;Saving unsubmitted form data with localStorage and Garlic.js&lt;/title&gt;
+    &lt;meta name="author" content="Igor Davydov"&gt;
+
+    &lt;!-- Le HTML5 shim, for IE6-8 support of HTML elements --&gt;
+    &lt;!--[if lt IE 9]&gt;
+      &lt;script src="http://html5shim.googlecode.com/svn/trunk/html5.js"&gt;&lt;/script&gt;
+    &lt;![endif]--&gt;
+
+    &lt;!-- Le styles --&gt;
+    &lt;link href="/assets/div/stylesheets/bootstrap.min.css?0.01570654258827675" type="text/css" rel="stylesheet" media="all"&gt;
+&lt;link href="/assets/div/stylesheets/style.css?0.6600716599041557" type="text/css" rel="stylesheet" media="all"&gt;
+&lt;link href="/assets/div/widgets/google_prettify/stylesheets/twitter-bootstrap.css?0.0799889360593059" type="text/css" rel="stylesheet" media="all"&gt;
+
+
+    &lt;script type="text/javascript"&gt;
+
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-36971433-1']);
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+
+&lt;/script&gt;
+
+    &lt;!-- Le fav and touch icons --&gt;
+  &lt;!-- Update these with your own images
+    &lt;link rel="shortcut icon" href="images/favicon.ico"&gt;
+    &lt;link rel="apple-touch-icon" href="images/apple-touch-icon.png"&gt;
+    &lt;link rel="apple-touch-icon" sizes="72x72" href="images/apple-touch-icon-72x72.png"&gt;
+    &lt;link rel="apple-touch-icon" sizes="114x114" href="images/apple-touch-icon-114x114.png"&gt;
+  --&gt;
+
+    &lt;link href='http://fonts.googleapis.com/css?family=Open+Sans' rel='stylesheet' type='text/css'&gt;
+  &lt;/head&gt;
+
+  &lt;body&gt;
+
+&lt;!--     &lt;div class="navbar"&gt;
+      &lt;div class="navbar-inner"&gt;
+        &lt;div class="container"&gt;
+          &lt;a class="brand" href="/"&gt;Random thoughts by Igor Davydov&lt;/a&gt;
+          &lt;ul class="nav"&gt;
+              
+                &lt;li&gt;&lt;a href="/about"&gt;About Me&lt;/a&gt;&lt;/li&gt;
+          &lt;/ul&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/div&gt; --&gt;
+
+    &lt;div class="container"&gt;
+
+      &lt;div class="masthead"&gt;
+        &lt;p&gt;Random thoughts by Igor Davydov&lt;/p&gt;
+      &lt;/div&gt;
+
+      &lt;div class="content"&gt;
+        &lt;!-- &lt;div class="page-header"&gt;
+  &lt;h1&gt;Saving unsubmitted form data with localStorage and Garlic.js &lt;/h1&gt;
+&lt;/div&gt; --&gt;
+
+&lt;!-- &lt;div class="row"&gt;
+  &lt;div class="span8"&gt; --&gt;
+    &lt;p&gt;I was thinking about improving user forms in one of my projects lately, and the first thing that came to mind was using some sort of autosave functionality. But I can&amp;#39;t really see a clean way to implement it with traditional Railsy style controllers. We would have to create an empty model instance, persist it, skip validations while user fills in all the fields. And we have to clean up if the user never really save the model. So I really dislike this approach.&lt;/p&gt;
+
+&lt;p&gt;We can easily do any kind of autosave on our update actions of the existing model. But the real problem is only with new data, which has not been validated and persisted yet. So how can we persist data from a form before it is submitted? And here comes localStore and fancy little library &lt;a href="http://garlicjs.org"&gt;garlic.js&lt;/a&gt;. The only thing you have to do after adding the library is to add &lt;code&gt;data-persist=&amp;quot;garlic&amp;quot;&lt;/code&gt; to your form. That&amp;#39;s it, your input will be stored if form is not submitted.&lt;/p&gt;
+
+&lt;p&gt;I also have some image uploading in my form, so to retrieve the images on form reload I put image ids in hidden inputs.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="html"&gt;&amp;lt;input class=&amp;quot;garlic-auto-save&amp;quot; type=&amp;quot;hidden&amp;quot; name=&amp;quot;image_ids[0]&amp;quot; value=&amp;#39;&amp;#39;&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;You will have to trigger &amp;#39;change&amp;#39; event manually for garlic to save new value&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="coffeescript"&gt;$(&amp;#39;input[value=&amp;quot;&amp;quot;]&amp;#39;).eq(0).val(&amp;#39;1&amp;#39;).trigger(&amp;#39;change&amp;#39;)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;And now on the form reload we can recreate the same state as before. Pretty cool!&lt;/p&gt;
+
+    &lt;hr&gt;
+    &lt;div class="pagination"&gt;
+        &lt;ul&gt;
+            &lt;span class="prev"&gt;&lt;a href="/ruby/loading-rails-faster-with-ruby-performance-patches" title="Loading rails faster with ruby performance patches"&gt;&amp;larr; Previous&lt;/a&gt;&lt;/span&gt;
+
+            &lt;span&gt;&lt;a href="/archive"&gt;Archive&lt;/a&gt;&lt;/span&gt;
+
+            &lt;span class="next"&gt;&lt;a href="/process-specific-versions-of-your-carrierwave-uploads-in-the-background" title="Process specific versions of your carrierwave uploads in the background"&gt;Next &amp;rarr;&lt;/a&gt;&lt;/span&gt;
+        &lt;/ul&gt;
+    &lt;/div&gt;
+    &lt;hr&gt;
+    &lt;!-- &lt;div id="disqus_thread"&gt;&lt;/div&gt;
+&lt;script&gt;
+    var disqus_developer = 1;
+    var disqus_shortname = 'divrb'; // required: replace example with your forum shortname
+    /* * * DON'T EDIT BELOW THIS LINE * * */
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = 'http://' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+&lt;/script&gt;
+&lt;noscript&gt;Please enable JavaScript to view the &lt;a href="http://disqus.com/?ref_noscript"&gt;comments powered by Disqus.&lt;/a&gt;&lt;/noscript&gt;
+&lt;a href="http://disqus.com" class="dsq-brlink"&gt;blog comments powered by &lt;span class="logo-disqus"&gt;Disqus&lt;/span&gt;&lt;/a&gt;
+ --&gt;
+  &lt;!-- &lt;/div&gt; --&gt;
+
+&lt;!--   &lt;div class="span4"&gt;
+    &lt;h4&gt;Published&lt;/h4&gt;
+    &lt;div class="date"&gt;&lt;span&gt;2012-12-11&lt;/span&gt;&lt;/div&gt;
+    &lt;br&gt;
+    &lt;h4&gt;Categories&lt;/h4&gt;
+    &lt;ul class="tag_box"&gt;
+    &lt;/ul&gt;
+    &lt;br&gt;
+    &lt;h4&gt;Tags&lt;/h4&gt;
+    &lt;ul class="tag_box"&gt;
+    &lt;/ul&gt;
+  &lt;/div&gt; --&gt;
+&lt;!-- &lt;/div&gt; --&gt;
+
+      &lt;/div&gt;
+
+      &lt;footer class="colophon"&gt;
+        &lt;ul&gt;
+          &lt;li&gt;
+            &lt;a href="/projects"&gt;Projects&lt;/a&gt;
+          &lt;/li&gt;
+          &lt;li&gt;
+            &lt;a href="/about"&gt;About&lt;/a&gt;
+          &lt;/li&gt;
+          &lt;li&gt;
+            &lt;a href="mailto:igordvdv@gmail.com?subject=Hey!" title="Email Me"&gt;Email&lt;/a&gt;
+          &lt;/li&gt;
+        &lt;/ul&gt;
+        &lt;p&gt;&amp;copy; Igor Davydov 2012
+          with help from &lt;a href="http://ruhoh.com" target="_blank" title="The Definitive Technical Blogging Framework"&gt;ruhoh&lt;/a&gt; and style stollen from &lt;a href="http://twitter.com/mdo" target="_blank" title="Mark Otto on Twitter"&gt;@mdo&lt;/a&gt; &lt;a href="http://markdotto.com" target="_blank" title="Mark Otto Blog"&gt;blog&lt;/a&gt;
+          &lt;!-- and &lt;a href="http://twitter.github.com/bootstrap/" target="_blank"&gt;Twitter Bootstrap&lt;/a&gt; --&gt;
+        &lt;/p&gt;
+      &lt;/footer&gt;
+
+    &lt;/div&gt; &lt;!-- /container --&gt;
+
+    &lt;!-- Google Prettify --&gt;
+&lt;script src="http://cdnjs.cloudflare.com/ajax/libs/prettify/188.0.0/prettify.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  var pres = document.getElementsByTagName("pre");
+  for (var i=0; i &lt; pres.length; ++i) {
+    pres[i].className = "prettyprint ";
+  }
+  prettyPrint();
+&lt;/script&gt;
+&lt;!-- end Google Prettify --&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+</description>
+    </item>
+    <item>
+      <title>Loading rails faster with ruby performance patches</title>
+      <link>http://divrb.com/ruby/loading-rails-faster-with-ruby-performance-patches</link>
+      <pubDate>2012-11-01</pubDate>
+      <description>&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+  &lt;head&gt;
+    &lt;meta charset="utf-8"&gt;
+    &lt;title&gt;Loading rails faster with ruby performance patches&lt;/title&gt;
+    &lt;meta name="author" content="Igor Davydov"&gt;
+
+    &lt;!-- Le HTML5 shim, for IE6-8 support of HTML elements --&gt;
+    &lt;!--[if lt IE 9]&gt;
+      &lt;script src="http://html5shim.googlecode.com/svn/trunk/html5.js"&gt;&lt;/script&gt;
+    &lt;![endif]--&gt;
+
+    &lt;!-- Le styles --&gt;
+    &lt;link href="/assets/div/stylesheets/bootstrap.min.css?0.9172826909631606" type="text/css" rel="stylesheet" media="all"&gt;
+&lt;link href="/assets/div/stylesheets/style.css?0.7105811040667921" type="text/css" rel="stylesheet" media="all"&gt;
+&lt;link href="/assets/div/widgets/google_prettify/stylesheets/twitter-bootstrap.css?0.2300819499234248" type="text/css" rel="stylesheet" media="all"&gt;
+
+
+    &lt;script type="text/javascript"&gt;
+
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-36971433-1']);
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+
+&lt;/script&gt;
+
+    &lt;!-- Le fav and touch icons --&gt;
+  &lt;!-- Update these with your own images
+    &lt;link rel="shortcut icon" href="images/favicon.ico"&gt;
+    &lt;link rel="apple-touch-icon" href="images/apple-touch-icon.png"&gt;
+    &lt;link rel="apple-touch-icon" sizes="72x72" href="images/apple-touch-icon-72x72.png"&gt;
+    &lt;link rel="apple-touch-icon" sizes="114x114" href="images/apple-touch-icon-114x114.png"&gt;
+  --&gt;
+
+    &lt;link href='http://fonts.googleapis.com/css?family=Open+Sans' rel='stylesheet' type='text/css'&gt;
+  &lt;/head&gt;
+
+  &lt;body&gt;
+
+&lt;!--     &lt;div class="navbar"&gt;
+      &lt;div class="navbar-inner"&gt;
+        &lt;div class="container"&gt;
+          &lt;a class="brand" href="/"&gt;Random thoughts by Igor Davydov&lt;/a&gt;
+          &lt;ul class="nav"&gt;
+              
+                &lt;li&gt;&lt;a href="/about"&gt;About Me&lt;/a&gt;&lt;/li&gt;
+          &lt;/ul&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/div&gt; --&gt;
+
+    &lt;div class="container"&gt;
+
+      &lt;div class="masthead"&gt;
+        &lt;p&gt;Random thoughts by Igor Davydov&lt;/p&gt;
+      &lt;/div&gt;
+
+      &lt;div class="content"&gt;
+        &lt;!-- &lt;div class="page-header"&gt;
+  &lt;h1&gt;Loading rails faster with ruby performance patches &lt;/h1&gt;
+&lt;/div&gt; --&gt;
+
+&lt;!-- &lt;div class="row"&gt;
+  &lt;div class="span8"&gt; --&gt;
+    &lt;p&gt;You would definitely like to see rails loading faster, and even more important rspec to spin off all the tests without any startup penalties (only if you are not loading rails, of course).&lt;/p&gt;
+
+&lt;p&gt;One of the things you can do is to build ruby with performance patches by &lt;a href="https://github.com/funny-falcon"&gt;funny-falcon&lt;/a&gt;. I&amp;#39;ve been on the conference in Moscow where he gave the &lt;a href="http://live.digitaloctober.ru/embed/1419?language=ru&amp;amp;params%5Bpw%5D=635&amp;amp;params%5Bph%5D=355&amp;amp;params%5Bepisodes_under%5D=1&amp;amp;params%5Bext_css%5D=do_player&amp;amp;params%5Bext_js%5D=do_player&amp;amp;params%5Bnolqtext%5D=1&amp;amp;params%5Bstate%5D=pause#time1347692940"&gt;talk&lt;/a&gt; about all the recent ruby patches he made. And this guy is really smart and knows his way thorough ruby internals really well. I could hardly understand half of his talk.
+I&amp;#39;ve found the results of applying this patches to be pretty impressive:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;time (rails runner &amp;quot;puts &amp;#39;hello world&amp;#39;&amp;quot;)
+
+# 1.9.3-p194
+# without patch:
+4.80s user 0.92s system 87% cpu 6.555 total
+# with patch:
+2.73s user 0.83s system 82% cpu 4.299 total
+
+# 1.9.3-p286
+# without patch:
+3.74s user 0.82s system 83% cpu 5.476 total
+# with patch:
+2.28s user 0.71s system 85% cpu 3.496 total
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;You can find how to build ruby with those patches in this &lt;a href="https://gist.github.com/3826116"&gt;gist&lt;/a&gt;.
+There is one particular feature in the gist&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;CONFIGURE_OPTS=&amp;quot;--disable-install-doc --with-readline-dir=$(brew --prefix readline)&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;which is telling ruby-build to build ruby with readline support which would let you use utf-8 characters in irb. It seems like this is only an OSX &lt;a href="http://blog.rlmflores.me/blog/2012/04/25/adding-utf-8-support-to-rubies-compiled-through-ruby-build/"&gt;issue&lt;/a&gt; .&lt;/p&gt;
+
+    &lt;hr&gt;
+    &lt;div class="pagination"&gt;
+        &lt;ul&gt;
+            &lt;span class="prev"&gt;&lt;a href="/about-this-blog" title="About this blog"&gt;&amp;larr; Previous&lt;/a&gt;&lt;/span&gt;
+
+            &lt;span&gt;&lt;a href="/archive"&gt;Archive&lt;/a&gt;&lt;/span&gt;
+
+            &lt;span class="next"&gt;&lt;a href="/saving-unsubmitted-form-data-with-localstorage-and-garlic-js" title="Saving unsubmitted form data with localStorage and Garlic.js"&gt;Next &amp;rarr;&lt;/a&gt;&lt;/span&gt;
+        &lt;/ul&gt;
+    &lt;/div&gt;
+    &lt;hr&gt;
+    &lt;!-- &lt;div id="disqus_thread"&gt;&lt;/div&gt;
+&lt;script&gt;
+    var disqus_developer = 1;
+    var disqus_shortname = 'divrb'; // required: replace example with your forum shortname
+    /* * * DON'T EDIT BELOW THIS LINE * * */
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = 'http://' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+&lt;/script&gt;
+&lt;noscript&gt;Please enable JavaScript to view the &lt;a href="http://disqus.com/?ref_noscript"&gt;comments powered by Disqus.&lt;/a&gt;&lt;/noscript&gt;
+&lt;a href="http://disqus.com" class="dsq-brlink"&gt;blog comments powered by &lt;span class="logo-disqus"&gt;Disqus&lt;/span&gt;&lt;/a&gt;
+ --&gt;
+  &lt;!-- &lt;/div&gt; --&gt;
+
+&lt;!--   &lt;div class="span4"&gt;
+    &lt;h4&gt;Published&lt;/h4&gt;
+    &lt;div class="date"&gt;&lt;span&gt;2012-11-01&lt;/span&gt;&lt;/div&gt;
+    &lt;br&gt;
+    &lt;h4&gt;Categories&lt;/h4&gt;
+    &lt;ul class="tag_box"&gt;
+      &lt;li&gt;
+        &lt;a href="/categories#ruby-ref"&gt;ruby &lt;span&gt;1&lt;/span&gt;&lt;/a&gt;
+      &lt;/li&gt;    &lt;/ul&gt;
+    &lt;br&gt;
+    &lt;h4&gt;Tags&lt;/h4&gt;
+    &lt;ul class="tag_box"&gt;
+    &lt;/ul&gt;
+  &lt;/div&gt; --&gt;
+&lt;!-- &lt;/div&gt; --&gt;
+
+      &lt;/div&gt;
+
+      &lt;footer class="colophon"&gt;
+        &lt;ul&gt;
+          &lt;li&gt;
+            &lt;a href="/projects"&gt;Projects&lt;/a&gt;
+          &lt;/li&gt;
+          &lt;li&gt;
+            &lt;a href="/about"&gt;About&lt;/a&gt;
+          &lt;/li&gt;
+          &lt;li&gt;
+            &lt;a href="mailto:igordvdv@gmail.com?subject=Hey!" title="Email Me"&gt;Email&lt;/a&gt;
+          &lt;/li&gt;
+        &lt;/ul&gt;
+        &lt;p&gt;&amp;copy; Igor Davydov 2012
+          with help from &lt;a href="http://ruhoh.com" target="_blank" title="The Definitive Technical Blogging Framework"&gt;ruhoh&lt;/a&gt; and style stollen from &lt;a href="http://twitter.com/mdo" target="_blank" title="Mark Otto on Twitter"&gt;@mdo&lt;/a&gt; &lt;a href="http://markdotto.com" target="_blank" title="Mark Otto Blog"&gt;blog&lt;/a&gt;
+          &lt;!-- and &lt;a href="http://twitter.github.com/bootstrap/" target="_blank"&gt;Twitter Bootstrap&lt;/a&gt; --&gt;
+        &lt;/p&gt;
+      &lt;/footer&gt;
+
+    &lt;/div&gt; &lt;!-- /container --&gt;
+
+    &lt;!-- Google Prettify --&gt;
+&lt;script src="http://cdnjs.cloudflare.com/ajax/libs/prettify/188.0.0/prettify.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  var pres = document.getElementsByTagName("pre");
+  for (var i=0; i &lt; pres.length; ++i) {
+    pres[i].className = "prettyprint ";
+  }
+  prettyPrint();
+&lt;/script&gt;
+&lt;!-- end Google Prettify --&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+</description>
+    </item>
+    <item>
+      <title>About this blog</title>
+      <link>http://divrb.com/about-this-blog</link>
+      <pubDate>2012-10-31</pubDate>
+      <description>Some details about how is this blog made</description>
+    </item>
+  </channel>
+</rss>
